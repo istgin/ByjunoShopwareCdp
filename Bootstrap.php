@@ -59,7 +59,12 @@ class Shopware_Plugins_Frontend_Intrum_Bootstrap extends Shopware_Components_Plu
         );
 
         $this->subscribeEvent(
-            'Enlight_Controller_Action_PreDispatch_Frontend_Checkout',
+            'Enlight_Controller_Action_PreDispatch_Frontend',
+            'GlobalPostAction'
+        );
+
+        $this->subscribeEvent(
+            'Shopware_Modules_Order_GetOrdernumber_FilterOrdernumber',
             'onSaveOrderMethodChange'
         );
 
@@ -354,7 +359,7 @@ CHANGE COLUMN `xml_responce` `xml_responce` TEXT CHARACTER SET 'utf8' COLLATE 'u
             'link' => 'http://www.intrum.com',
             'author' =>  'Intrum.com',
             'copyright' =>  'Intrum.com 2015',
-            'version' =>  '1.2.0'
+            'version' =>  '1.3.0'
         );
     }
 
@@ -439,7 +444,13 @@ CHANGE COLUMN `xml_responce` `xml_responce` TEXT CHARACTER SET 'utf8' COLLATE 'u
                 $intrumResponse->setRawResponse($response);
                 $intrumResponse->processResponse();
                 $status = (int)$intrumResponse->getCustomerRequestStatus();
-                $this->saveLog($request, $xml, $response, $status, "Intrum status");
+                $statusLog = "Intrum status";
+                if (!empty($_SESSION["intrum"]["mustupdate"])) {
+                    $statusLog .= " ".$_SESSION["intrum"]["mustupdate"];
+                } else {
+                    $statusLog .= " GetPaymentMeans";
+                }
+                $this->saveLog($request, $xml, $response, $status, $statusLog);
                 if (intval($status) > 15) {
                     $status = 0;
                 }
@@ -471,21 +482,36 @@ CHANGE COLUMN `xml_responce` `xml_responce` TEXT CHARACTER SET 'utf8' COLLATE 'u
         return $return;
     }
 
+
+
+    protected function getTrustedShopBasketConfig($checkoutController)
+    {
+        $amount = Shopware()->Modules()->Basket()->sGetAmount();
+        $shippingCost = $checkoutController->getShippingCosts();
+        $amount = $amount["totalAmount"] + $shippingCost["value"];
+        if($checkoutController->View()->sAmountWithTax){
+            $amount = $checkoutController->View()->sAmountWithTax;
+        }
+        return $amount;
+    }
+
     public function onSaveOrderMethodChange(Enlight_Event_EventArgs $args) {
-        if ($args->getRequest()->getControllerName() == 'checkout' && $args->getRequest()->getActionName() == 'finish') {
+
+       // if ($args->getRequest()->getControllerName() == 'checkout' && $args->getRequest()->getActionName() == 'finish') {
             /* @var $config Enlight_Config */
             $config = $this->Config();
             $mode = $config->get("plugin_mode");
             $minAmount = intval($config->get("minimal_amount"));
             $user = $this->getUser();
             {
-                $basket = Shopware()->Modules()->Basket()->sGetAmount();
-                if ($basket == null || $minAmount > $basket['totalAmount']) {
+                $subject = $args->getSubject();
+                $basketAmount = $subject->sAmount;
+                if ($basketAmount == null || $minAmount > $basketAmount) {
                     return null;
                 }
                 $billing = $user['billingaddress'];
                 $shipping = $user['shippingaddress'];
-                $request = CreateShopWareShopRequest($user, $billing, $shipping, $basket['totalAmount'], $config);
+                $request = CreateShopWareShopRequest($user, $billing, $shipping, $basketAmount, $config);
                 $xml = $request->createRequest();
                 $intrumCommunicator = new IntrumCommunicator();
                 if (isset($mode) && $mode == 'live') {
@@ -500,7 +526,7 @@ CHANGE COLUMN `xml_responce` `xml_responce` TEXT CHARACTER SET 'utf8' COLLATE 'u
                     $intrumResponse->setRawResponse($response);
                     $intrumResponse->processResponse();
                     $status = (int)$intrumResponse->getCustomerRequestStatus();
-                    $this->saveLog($request, $xml, $response, $status, "Intrum status");
+                    $this->saveLog($request, $xml, $response, $status, "Intrum status final check");
                     if (intval($status) > 15) {
                         $status = 0;
                     }
@@ -509,25 +535,67 @@ CHANGE COLUMN `xml_responce` `xml_responce` TEXT CHARACTER SET 'utf8' COLLATE 'u
             }
             if (isset($_SESSION["intrum"]["status"])) {
                 $status = intval($_SESSION["intrum"]["status"]);
-                $configString = $config->get("status".(String)$status);
+                $configString = $config->get("status" . (String)$status);
                 $DeniedMethods = explode(",", $configString);
-                $sql     = 'SELECT `name`, `description` FROM s_core_paymentmeans WHERE id = '.intval($_SESSION["Shopware"]["sOrderVariables"]["sUserData"]["additional"]["user"]["paymentID"]);
+                $sql = 'SELECT `name`, `description` FROM s_core_paymentmeans WHERE id = ' . intval($_SESSION["Shopware"]["sOrderVariables"]["sUserData"]["additional"]["user"]["paymentID"]);
                 $name = Shopware()->Db()->fetchRow($sql);
                 if (in_array($name["name"], $DeniedMethods)) {
                     $_SESSION["Shopware"]["sOrderVariables"]["sUserData"]["additional"]["user"]["paymentID"] = 0;
-                    $sql = "UPDATE s_user SET paymentID = 0 WHERE id = ".intval($user["additional"]["user"]["customerId"]);
+                    $sql = "UPDATE s_user SET paymentID = 0 WHERE id = " . intval($user["additional"]["user"]["customerId"]);
                     Shopware()->Db()->exec($sql);
-                    $_SESSION["intrum"]["message"] = $config->get("decline_message_".(String)$status);
-                    header("Location:".Shopware()->Router()->assemble(array('module'=>'frontend','controller'=>'checkout','action'=>'cart')));
+                    $_SESSION["intrum"]["message"] = $config->get("decline_message_" . (String)$status);
+                    header("Location:" . Shopware()->Router()->assemble(array('module' => 'frontend', 'controller' => 'checkout', 'action' => 'cart')));
                     exit();
                 }
             }
+       // }
+    }
+
+    public function GlobalPostAction(Enlight_Event_EventArgs $args)
+    {
+        if (!empty($_SESSION["intrum"]["mustupdate"])) {
+
+            unset($_SESSION["intrum"]["status"]);
+            $this->IntrumCdpStatusCall($args);
+            unset($_SESSION["intrum"]["mustupdate"]);
+        }
+        if ((
+                $args->getRequest()->getControllerName() == 'checkout' &&
+
+                ($args->getRequest()->getActionName() == 'addAccessories'
+                    || $args->getRequest()->getActionName() == 'changeQuantity'
+                    || $args->getRequest()->getActionName() == 'addVoucher'
+                    || $args->getRequest()->getActionName() == 'addPremium'
+                    || $args->getRequest()->getActionName() == 'addArticle'
+                    || $args->getRequest()->getActionName() == 'deleteArticle'
+                    || $args->getRequest()->getActionName() == 'saveShipping'
+                    || $args->getRequest()->getActionName() == 'ajaxAddArticle'
+                    || $args->getRequest()->getActionName() == 'ajaxAddArticleCart'
+                    || $args->getRequest()->getActionName() == 'ajaxDeleteArticle'
+                    || $args->getRequest()->getActionName() == 'ajaxDeleteArticleCart'
+                    || $args->getRequest()->getActionName() == 'saveShippingPayment'
+
+                )
+            )
+            ||
+            (
+                $args->getRequest()->getControllerName() == 'account' &&
+                ($args->getRequest()->getActionName() == 'saveBilling'
+                    || $args->getRequest()->getActionName() == 'saveShipping'
+                    || $args->getRequest()->getActionName() == 'savePayment'
+                )
+            )
+        ) {
+            $_SESSION["intrum"]["mustupdate"] = $args->getRequest()->getActionName();
         }
     }
 
     public function IntrumCdpOrderCall(Enlight_Event_EventArgs $args)
     {
-        if ($args->getRequest()->getControllerName() == 'checkout' && $args->getRequest()->getActionName() == 'finish') {
+        if ($args->getRequest()->getControllerName() == 'checkout' &&
+            ($args->getRequest()->getActionName() == 'finish'
+            )
+            ) {
             /* @var $config Enlight_Config */
             $config = $this->Config();
             $mode = $config->get("plugin_mode");
@@ -537,7 +605,6 @@ CHANGE COLUMN `xml_responce` `xml_responce` TEXT CHARACTER SET 'utf8' COLLATE 'u
             $order = Shopware()->Models()->getRepository('Shopware\Models\Order\Order')
                 ->findOneBy(array('number' => Shopware()->Session()->sOrderVariables['sOrderNumber']));
             if (empty($user) || empty($user['billingaddress']) || empty($user['shippingaddress']) || empty($order)) {
-                exit('aaaa');
                 return null;
             }
             $billing = $user['billingaddress'];
