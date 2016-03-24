@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Shopware Intrum Plugin
+ * Shopware Intrum Plugins
  */
 require(__DIR__).'/api/intrum.php';
 require(__DIR__).'/api/helper.php';
