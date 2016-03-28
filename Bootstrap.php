@@ -365,12 +365,16 @@ CHANGE COLUMN `xml_responce` `xml_responce` TEXT CHARACTER SET 'utf8' COLLATE 'u
 
     public function getUser()
     {
-        $userData = Shopware()->Modules()->Admin()->sGetUserData();
-        if (!empty($userData)) {
-            return $userData;
-        } else {
-            return null;
-        }
+		try {
+			$userData = Shopware()->Modules()->Admin()->sGetUserData();
+			if (!empty($userData)) {
+				return $userData;
+			} else {
+				return null;
+			}
+		} catch(\Exception $e) {
+            return null;		
+		}
        /* if (!empty(Shopware()->Session()->sOrderVariables['sUserData'])) {
             return Shopware()->Session()->sOrderVariables['sUserData'];
         } else {
