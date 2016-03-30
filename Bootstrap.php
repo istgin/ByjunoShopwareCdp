@@ -616,6 +616,9 @@ CHANGE COLUMN `xml_responce` `xml_responce` TEXT CHARACTER SET 'utf8' COLLATE 'u
             if ($minAmount > $order->getInvoiceAmount()) {
                 return null;
             }
+			if (isset($_SESSION["existorder"][$order->getNumber()])) {
+                return null;				
+			}
             $request = CreateShopWareOrderRequest($user, $billing, $shipping, $order, $config);
 
             $xml = $request->createRequest();
@@ -637,6 +640,7 @@ CHANGE COLUMN `xml_responce` `xml_responce` TEXT CHARACTER SET 'utf8' COLLATE 'u
                 }
                 $this->saveLog($request, $xml, $response, $status, "Order completed");
             }
+			$_SESSION["existorder"][$order->getNumber()] = true;
         }
     }
 }
