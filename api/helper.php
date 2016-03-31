@@ -99,6 +99,10 @@ function CreateShopWareShopRequest($user, $billing, $shipping, $totalAmount, Enl
     $request->setPostCode((String)$billing['zipcode']);
     $request->setTown((String)$billing['city']);
     $request->setFax((String)$billing['fax']);
+	
+	if (!empty($billing['birthday'])) {
+		$request->setDateOfBirth((String)$billing['birthday']);		
+	}
 
     $request->setTelephonePrivate((String)$billing['phone']);
     $request->setEmail((String)$user["additional"]["user"]["email"]);
@@ -203,6 +207,10 @@ function CreateShopWareOrderRequest($user, $billing, $shipping, \Shopware\Models
     $request->setPostCode((String)$billing['zipcode']);
     $request->setTown((String)$billing['city']);
     $request->setFax((String)$billing['fax']);
+	
+	if (!empty($billing['birthday'])) {
+		$request->setDateOfBirth((String)$billing['birthday']);		
+	}
 
     $request->setTelephonePrivate((String)$billing['phone']);
     $request->setEmail((String)$user["additional"]["user"]["email"]);
