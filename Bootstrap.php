@@ -317,6 +317,7 @@ CHANGE COLUMN `xml_responce` `xml_responce` TEXT CHARACTER SET 'utf8' COLLATE 'u
         /* @var $view Enlight_View_Default */
         $view = $args->getSubject()->View();
 
+
         if (!$request->isDispatched()
             || $response->isException()
             || $request->getModuleName() != 'frontend'
@@ -325,6 +326,19 @@ CHANGE COLUMN `xml_responce` `xml_responce` TEXT CHARACTER SET 'utf8' COLLATE 'u
         ) {
             return;
         }
+
+        if (!strstr($args->getRequest()->getActionName(), "ajax")) {
+            $view->messageIntrum = "";
+            if (!empty($_SESSION["intrum"]["paymentMessage"])) {
+                $view->messageIntrum = $_SESSION["intrum"]["paymentMessage"];
+                unset($_SESSION["intrum"]["paymentMessage"]);
+            }
+            $this->Application()->Template()->addTemplateDir(
+                $this->Path() . 'Views/'
+            );
+            $view->extendsTemplate('frontend/intrum_message.tpl');
+        }
+
 
         //if ($request->getControllerName() == 'checkout'/* && $request->getActionName() == 'cart'*/ && !isset($_SESSION["intrum_tmx"])) {
             $config = $this->Config();
@@ -340,6 +354,7 @@ CHANGE COLUMN `xml_responce` `xml_responce` TEXT CHARACTER SET 'utf8' COLLATE 'u
                 );
                 $view->extendsTemplate('frontend/intrum_tmx.tpl');
             }
+
         //}
 	}
 
@@ -475,6 +490,7 @@ CHANGE COLUMN `xml_responce` `xml_responce` TEXT CHARACTER SET 'utf8' COLLATE 'u
         foreach($methods as $m) {
             if (in_array($m["name"], $DeniedMethods)) {
                 if (isset($_SESSION["Shopware"]["sOrderVariables"]["sUserData"]["additional"]["user"]["paymentID"]) && isset($user["additional"]["user"]["customerId"]) && $m["id"] == $_SESSION["Shopware"]["sOrderVariables"]["sUserData"]["additional"]["user"]["paymentID"]) {
+                     $_SESSION["intrum"]["paymentMessage"] = $config->get("decline_message_" . (String)$status);
                     $_SESSION["Shopware"]["sOrderVariables"]["sUserData"]["additional"]["user"]["paymentID"] = 0;
                     $sql = "UPDATE s_user SET paymentID = 0 WHERE id = ".intval($user["additional"]["user"]["customerId"]);
                     Shopware()->Db()->exec($sql);
@@ -563,6 +579,7 @@ CHANGE COLUMN `xml_responce` `xml_responce` TEXT CHARACTER SET 'utf8' COLLATE 'u
             $this->IntrumCdpStatusCall($args);
             unset($_SESSION["intrum"]["mustupdate"]);
         }
+
         if ((
                 $args->getRequest()->getControllerName() == 'checkout' &&
 
