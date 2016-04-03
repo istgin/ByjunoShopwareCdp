@@ -490,7 +490,7 @@ CHANGE COLUMN `xml_responce` `xml_responce` TEXT CHARACTER SET 'utf8' COLLATE 'u
         foreach($methods as $m) {
             if (in_array($m["name"], $DeniedMethods)) {
                 if (isset($_SESSION["Shopware"]["sOrderVariables"]["sUserData"]["additional"]["user"]["paymentID"]) && isset($user["additional"]["user"]["customerId"]) && $m["id"] == $_SESSION["Shopware"]["sOrderVariables"]["sUserData"]["additional"]["user"]["paymentID"]) {
-                     $_SESSION["intrum"]["paymentMessage"] = $config->get("decline_message_" . (String)$status);
+                    $_SESSION["intrum"]["paymentMessage"] = $config->get("decline_message_" . (String)$status);
                     $_SESSION["Shopware"]["sOrderVariables"]["sUserData"]["additional"]["user"]["paymentID"] = 0;
                     $sql = "UPDATE s_user SET paymentID = 0 WHERE id = ".intval($user["additional"]["user"]["customerId"]);
                     Shopware()->Db()->exec($sql);
@@ -500,6 +500,87 @@ CHANGE COLUMN `xml_responce` `xml_responce` TEXT CHARACTER SET 'utf8' COLLATE 'u
             $return[] = $m;
         }
         return $return;
+    }
+
+
+    /**
+     * Event listener method
+     *
+     * @param Enlight_Event_EventArgs $args
+     */
+    public function OnsiteCdpStatusCall(Enlight_Event_EventArgs $args)
+    {
+        /* @var $config Enlight_Config */
+        $config = $this->Config();
+        $mode = $config->get("plugin_mode");
+        $minAmount = intval($config->get("minimal_amount"));
+        $user = $this->getUser();
+        if(empty($user)) {
+            return;
+        }
+        if (empty($user) || empty($user['billingaddress']) || empty($user['shippingaddress'])) {
+            return;
+        }
+        $basket = Shopware()->Modules()->Basket()->sGetAmount();
+        if ($basket == null || $minAmount > $basket['totalAmount']) {
+            return;
+        }
+        $billing = $user['billingaddress'];
+        $shipping = $user['shippingaddress'];
+        if (isset($_SESSION["intrum"]["status"])) {
+            $sesStatus = (string)$_SESSION["intrum"]["status"];
+        }
+        $status = 0;
+        if (!isset($sesStatus)) {
+            $request = CreateShopWareShopRequest($user, $billing, $shipping, $basket['totalAmount'], $config);
+            $xml = $request->createRequest();
+            $intrumCommunicator = new IntrumCommunicator();
+            if (isset($mode) && $mode == 'live') {
+                $intrumCommunicator->setServer('live');
+            } else {
+                $intrumCommunicator->setServer('test');
+            }
+            $response = $intrumCommunicator->sendRequest($xml);
+            if ($response) {
+                $intrumResponse = new IntrumResponse();
+                $intrumResponse->setRawResponse($response);
+                $intrumResponse->processResponse();
+                $status = (int)$intrumResponse->getCustomerRequestStatus();
+                $statusLog = "Intrum status";
+                if (!empty($_SESSION["intrum"]["mustupdate"])) {
+                    $statusLog .= " ".$_SESSION["intrum"]["mustupdate"];
+                } else {
+                    $statusLog .= " GetPaymentMeans";
+                }
+                $this->saveLog($request, $xml, $response, $status, $statusLog);
+                if (intval($status) > 15) {
+                    $status = 0;
+                }
+            }
+            $_SESSION["intrum"]["status"] = $status;
+        } else {
+            $status = $sesStatus;
+        }
+        if ($status > 15) {
+            $status = '0';
+        }
+        $configString = $config->get("status".(String)$status);
+        $DeniedMethods = explode(",", $configString);
+        foreach($DeniedMethods as &$val) {
+            $val = trim($val);
+        }
+        $sql = "SELECT paymentID FROM s_user WHERE id = " . intval($user["additional"]["user"]["customerId"]);
+        $paymentMethodId = Shopware()->Db()->fetchOne($sql);
+        if (!empty($paymentMethodId) && !empty($user["additional"]["user"]["customerId"])) {
+            $method = Shopware()->Modules()->Admin()->sGetPaymentMeanById($paymentMethodId);
+            if (in_array($method["name"], $DeniedMethods)) {
+                $_SESSION["intrum"]["paymentMessage"] = $config->get("decline_message_" . (String)$status);
+                $_SESSION["Shopware"]["sPaymentID"] = 0;
+                $_SESSION["Shopware"]["sOrderVariables"]["sUserData"]["additional"]["user"]["paymentID"] = 0;
+                $sql = "UPDATE s_user SET paymentID = 0 WHERE id = " . intval($user["additional"]["user"]["customerId"]);
+                Shopware()->Db()->exec($sql);
+            }
+        }
     }
 
 
@@ -576,7 +657,7 @@ CHANGE COLUMN `xml_responce` `xml_responce` TEXT CHARACTER SET 'utf8' COLLATE 'u
         if (!empty($_SESSION["intrum"]["mustupdate"])) {
 
             unset($_SESSION["intrum"]["status"]);
-            $this->IntrumCdpStatusCall($args);
+            $this->OnsiteCdpStatusCall($args);
             unset($_SESSION["intrum"]["mustupdate"]);
         }
 

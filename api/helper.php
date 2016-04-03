@@ -99,8 +99,8 @@ function CreateShopWareShopRequest($user, $billing, $shipping, $totalAmount, Enl
     $request->setPostCode((String)$billing['zipcode']);
     $request->setTown((String)$billing['city']);
     $request->setFax((String)$billing['fax']);
-	
-	if (!empty($billing['birthday'])) {
+
+	if (!empty($billing['birthday']) && substr($billing['birthday'], 0, 4) != '0000') {
 		$request->setDateOfBirth((String)$billing['birthday']);		
 	}
 
@@ -208,7 +208,7 @@ function CreateShopWareOrderRequest($user, $billing, $shipping, \Shopware\Models
     $request->setTown((String)$billing['city']);
     $request->setFax((String)$billing['fax']);
 	
-	if (!empty($billing['birthday'])) {
+	if (!empty($billing['birthday']) && substr($billing['birthday'], 0, 4) != '0000') {
 		$request->setDateOfBirth((String)$billing['birthday']);		
 	}
 
