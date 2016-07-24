@@ -42,7 +42,7 @@ Ext.define('Shopware.apps.IntrumLog.view.detail.Detail', {
    * of the view through Ext.widget('moptPayoneApilogMainDetail')
    * @string
    */
-  alias: 'widget.moptPayoneApilogMainDetail',
+  alias: 'widget.IntrumApilogMainDetail',
   /**
    * The window uses a border layout, so we need to set
    * a region for the grid panel
@@ -72,8 +72,13 @@ Ext.define('Shopware.apps.IntrumLog.view.detail.Detail', {
             listeners: {
                 boxready:function (e) {
                     url = 'IntrumLog/getGridData?id='+me.itemSelected+'&type=request';
-                    ExternalInfoWindow.request({
-                        url:url,
+                    Ext.Ajax.request({
+                        url:'{url controller="IntrumLog" action="getGridData"}',
+                        method: 'POST',
+                        data: {
+                            id: me.itemSelected,
+                            type: 'request'
+                        },
                         success:function (r) {
                             e.update(r.responseText);
                         }
@@ -91,8 +96,13 @@ Ext.define('Shopware.apps.IntrumLog.view.detail.Detail', {
             listeners: {
                 boxready:function (e) {
                     url = 'IntrumLog/getGridData?id='+me.itemSelected+'&type=response';
-                    ExternalInfoWindow.request({
-                        url:url,
+                    Ext.Ajax.request({
+                        url:'{url controller="IntrumLog" action="getGridData"}',
+                        method: 'POST',
+                        data: {
+                            id: me.itemSelected,
+                            type: 'response'
+                        },
                         success:function (r) {
                             e.update(r.responseText);
                         }
