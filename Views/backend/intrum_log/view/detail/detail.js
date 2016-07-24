@@ -74,8 +74,8 @@ Ext.define('Shopware.apps.IntrumLog.view.detail.Detail', {
                     url = 'IntrumLog/getGridData?id='+me.itemSelected+'&type=request';
                     Ext.Ajax.request({
                         url:'{url controller="IntrumLog" action="getGridData"}',
-                        method: 'POST',
-                        data: {
+                        method: 'GET',
+                        params: {
                             id: me.itemSelected,
                             type: 'request'
                         },
@@ -98,8 +98,8 @@ Ext.define('Shopware.apps.IntrumLog.view.detail.Detail', {
                     url = 'IntrumLog/getGridData?id='+me.itemSelected+'&type=response';
                     Ext.Ajax.request({
                         url:'{url controller="IntrumLog" action="getGridData"}',
-                        method: 'POST',
-                        data: {
+                        method: 'GET',
+                        params: {
                             id: me.itemSelected,
                             type: 'response'
                         },
